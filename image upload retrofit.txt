@@ -2,6 +2,22 @@ compile 'com.mlsdev.rximagepicker:library:2.0.2'
 ========================
 <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 ========================
+function uploadImage(){
+	$r_id=$_REQUEST['r_id'];
+	$f_name=$_FILES['file']['name'];
+	$result = array("success" => $_FILES["file"]["name"]);
+	$file_path = 'uploads/repairing/'.basename( $_FILES['file']['name']);
+	if(move_uploaded_file($_FILES['file']['tmp_name'], $file_path)) {
+		$sql="insert into aa_repairing_img (r_id, path) values ($r_id,'$f_name')";
+		exeQuery($sql);	
+	    //$result = array("success" => "File successfully uploaded");
+	} else{
+
+	    //$result = array("success" => "error uploading file");
+	}
+	//echo json_encode($result, JSON_PRETTY_PRINT);
+}
+========================
 Dialogs for uploading
 String[] imageUploadOptions=getResources().getStringArray(R.array.image_upload);
         this.repairingId=repairing.getId();
