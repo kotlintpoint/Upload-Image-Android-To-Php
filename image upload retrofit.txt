@@ -1,0 +1,153 @@
+compile 'com.mlsdev.rximagepicker:library:2.0.2'
+========================
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+========================
+Dialogs for uploading
+String[] imageUploadOptions=getResources().getStringArray(R.array.image_upload);
+        this.repairingId=repairing.getId();
+        new AlertDialog.Builder(context)
+                .setItems(imageUploadOptions, (dialog, which) -> {
+                    switch (which){
+                        case 0:
+                            //showFileChooser();
+                            pickImagesFromSource();
+                            break;
+                        case 1:
+                            Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                            startActivityForResult(intent, REQ_CAMERA_IMAGE);
+                            break;
+                    }
+                })
+                .create()
+                .show();
+=============================
+private void pickImagesFromSource()
+    {
+        RxImagePicker.with(context).requestMultipleImages().subscribe(new Consumer<List<Uri>>() {
+
+            @Override
+            public void accept(@NonNull List<Uri> uris) throws Exception {
+                //Get images by uris.
+                Toast.makeText(context, "Result : "+uris.size(), Toast.LENGTH_LONG).show();
+                uriList=uris;
+                count=0;
+                uploadImages();
+            }
+
+        });
+    }
+=========================
+private void uploadImages() {
+        if(uriList!=null && count<uriList.size()) {
+            UtilityHelper.showLoading(context);
+            RxImageConverters.uriToBitmap(context, uriList.get(count))
+                    .subscribe(this::onImagePicked, throwable -> Toast.makeText(context, String.format("Error: %s", throwable), Toast.LENGTH_LONG).show());
+        }
+        else{
+            UtilityHelper.dismisLoading();
+        }
+    }
+==========================
+private void onImagePicked(Object result) {
+
+        //Toast.makeText(context, String.format("Result: %s", result), Toast.LENGTH_LONG).show();
+        if (result instanceof Bitmap) {
+            //ivPickedImage.setImageBitmap((Bitmap) result);
+            Uri filePath=saveImage((Bitmap)result);
+            dao.uploadImage(context, repairingId, filePath, new RepairingDao.ServiceCallBack() {
+                @Override
+                public void callBack(String result) {
+                    UtilityHelper.dismisLoading();
+                    UtilityHelper.showToast(context, result);
+                    count++;
+                    uploadImages();
+                }
+            });
+        }
+    }
+===============================
+ public void uploadImage(final Context context, String p_id, Uri filePath, final ServiceCallBack serviceCallBack){
+        //String path = getRealPathFromURIPath(filePath, context);
+        File file = new File(filePath.toString());
+
+        //ApiInterface service= ApiClient.getClient().create(ApiInterface.class);
+        RequestBody reqFile = RequestBody.create(MediaType.parse("image/*"), file);
+        MultipartBody.Part body = MultipartBody.Part.createFormData("file", file.getName(), reqFile);
+
+        RequestBody filename  = RequestBody.create(MediaType.parse("text/plain"), file.getName());
+
+        retrofit2.Call<okhttp3.ResponseBody> req = apiService.repairingImageUpload(p_id,body, filename);
+        req.enqueue(new Callback<ResponseBody>() {
+            @Override
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                // Do Something
+                try {
+                    String result=response.body().string();
+                    UtilityHelper.showToast(context,result);
+                    serviceCallBack.callBack(result);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    serviceCallBack.callBack(Constants.ERROR);
+                }
+            }
+
+            @Override
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                t.printStackTrace();
+                serviceCallBack.callBack(Constants.ERROR);
+            }
+        });
+  =================================
+  @Multipart
+    @POST(REPAIRING+QUE+OP+EQ+UPLOAD)
+    Call<ResponseBody> repairingImageUpload(
+                                        @Query("r_id")String r_id,
+                                        @Part MultipartBody.Part image,
+                                        @Part("name") RequestBody name);
+===================================
+ @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if(requestCode==REQ_CAMERA_IMAGE && resultCode==RESULT_OK){
+            UtilityHelper.showLoading(context);
+            //Uri filePath = Uri.parse(UtilityHelper.getOriginalImagePath(getActivity()));
+            Bitmap bitmap=(Bitmap) data.getExtras().get("data");
+            Uri filePath=saveImage(bitmap);
+            dao.uploadImage(context, repairingId, filePath, new RepairingDao.ServiceCallBack() {
+                @Override
+                public void callBack(String result) {
+                    UtilityHelper.dismisLoading();
+                    UtilityHelper.showToast(context,result);
+                    repairingId=null;
+                }
+            });
+        }
+    }
+	
+=================================
+ private Uri saveImage(Bitmap bitmap) {
+        //Bitmap sourceUri=(Bitmap) data.getExtras().get("data");
+        String root = getActivity().getFilesDir().toString();
+
+        File myDir = new File(root + "/android");
+        myDir.mkdirs();
+
+        Random generator = new Random();
+        long n = System.currentTimeMillis();
+        //n = generator.nextInt(n);
+        //Give the file name that u want
+        String fname = "repairing_" + n + "_.jpg";
+        String filePath = root + "/android/" + fname;
+        File destination = new File(myDir, fname);
+        FileOutputStream out = null;
+        try {
+            out = new FileOutputStream(destination);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 60, out);
+            out.flush();
+            out.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return Uri.parse(filePath);
+    }
